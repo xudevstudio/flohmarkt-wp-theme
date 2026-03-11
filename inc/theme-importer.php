@@ -528,7 +528,7 @@ function flohmarkt_theme_activation_import() {
         update_option('flohmarkt_import_result', $result);
     }
 }
-add_action('after_switch_theme', 'flohmarkt_theme_activation_import');
+// add_action('after_switch_theme', 'flohmarkt_theme_activation_import');
 
 // Admin notice after import
 function flohmarkt_import_admin_notice() {

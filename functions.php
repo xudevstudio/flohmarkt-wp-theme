@@ -28,31 +28,83 @@ function flohmarkt_sideload_image($request) {
     require_once ABSPATH . 'wp-admin/includes/image.php';
 
     $image_url = $request->get_param('image_url');
-    $filename  = $request->get_param('filename') ?: 'flohmarkt-' . time() . '.webp';
+    $filename  = $request->get_param('filename') ?: 'flohmarkt-' . time() . '.jpg';
     $alt_text  = $request->get_param('alt_text') ?: '';
 
     if (empty($image_url)) {
         return new WP_Error('no_url', 'image_url is required', ['status' => 400]);
     }
 
-    // Download the image
-    $tmp = download_url($image_url, 30);
-    if (is_wp_error($tmp)) {
-        return new WP_Error('download_failed', $tmp->get_error_message(), ['status' => 500]);
+    // Download image using cURL to bypass bot blockers (wp_remote_get often gets 401/403)
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, $image_url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, 1);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+    curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+        'Accept-Language: de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7',
+        'Referer: https://www.google.de/'
+    ]);
+    
+    $image_data = curl_exec($ch);
+    $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $content_type = curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
+    curl_close($ch);
+
+    if ($http_code !== 200 || empty($image_data)) {
+        error_log('SIDELOAD FAIL: HTTP ' . $http_code . ' URL: ' . $image_url);
+        return new WP_Error('download_failed', 'HTTP ' . $http_code, ['status' => 500]);
+    }
+
+    if (strlen($image_data) < 500) {
+        error_log('SIDELOAD FAIL: Image too small. URL: ' . $image_url);
+        return new WP_Error('download_failed', 'Image too small', ['status' => 500]);
+    }
+
+    // Detect extension from content-type
+    $ext = '.jpg';
+    if (strpos($content_type, 'png') !== false) $ext = '.png';
+    elseif (strpos($content_type, 'webp') !== false) $ext = '.webp';
+    elseif (strpos($content_type, 'gif') !== false) $ext = '.gif';
+
+    $filename = preg_replace('/\.(jpg|jpeg|png|webp|gif)$/i', '', $filename) . $ext;
+
+    // Save to temp using WP functions
+    require_once( ABSPATH . 'wp-admin/includes/file.php' );
+    $tmp_dir = get_temp_dir();
+    $tmp = wp_tempnam($filename, $tmp_dir);
+    
+    // Some wp_tempnam implementations don't give the right extension, force it
+    $tmp_with_ext = $tmp_dir . wp_unique_filename( $tmp_dir, $filename );
+    
+    file_put_contents($tmp_with_ext, $image_data);
+    @unlink($tmp); // Remove the original ext-less tmp if it existed
+
+    // Resize to 1200x630 if possible
+    $editor = wp_get_image_editor($tmp_with_ext);
+    if (!is_wp_error($editor)) {
+        $editor->resize(1200, 630, true);
+        $editor->set_quality(85);
+        $editor->save($tmp_with_ext);
     }
 
     $file_array = [
         'name'     => sanitize_file_name($filename),
-        'tmp_name' => $tmp,
+        'tmp_name' => $tmp_with_ext,
     ];
 
     $media_id = media_handle_sideload($file_array, 0, $alt_text);
     @unlink($tmp);
 
     if (is_wp_error($media_id)) {
+        error_log('SIDELOAD FAIL: ' . $media_id->get_error_message() . ' URL: ' . $image_url);
         return new WP_Error('upload_failed', $media_id->get_error_message(), ['status' => 500]);
     }
 
+    error_log('SIDELOAD SUCCESS: ID ' . $media_id . ' URL: ' . $image_url);
     if ($alt_text) update_post_meta($media_id, '_wp_attachment_image_alt', $alt_text);
 
     return rest_ensure_response([
@@ -60,6 +112,37 @@ function flohmarkt_sideload_image($request) {
         'source_url' => wp_get_attachment_url($media_id),
     ]);
 }
+
+/* ─────── REMOVE DUPLICATE IMAGES FROM POST CONTENT ─────── */
+function flohmarkt_remove_duplicate_images($content) {
+    if (!is_singular('post')) return $content;
+
+    $seen = [];
+
+    // Pre-load the featured image into 'seen' so it gets stripped from the body
+    if (has_post_thumbnail()) {
+        $thumb_id = get_post_thumbnail_id();
+        $thumb_url = wp_get_attachment_image_src($thumb_id, 'full');
+        if ($thumb_url && !empty($thumb_url[0])) {
+            $seen[] = strtolower(basename(parse_url($thumb_url[0], PHP_URL_PATH)));
+        }
+    }
+
+    $content = preg_replace_callback('/<img[^>]+src=["\']([^"\']+)["\'][^>]*>/i', function($match) use (&$seen) {
+        // Get basename without query params for comparison
+        $src = $match[1];
+        $key = strtolower(basename(parse_url($src, PHP_URL_PATH)));
+
+        if (in_array($key, $seen)) {
+            return ''; // Remove duplicate or featured image
+        }
+        $seen[] = $key;
+        return $match[0]; // Keep first occurrence
+    }, $content);
+
+    return $content;
+}
+add_filter('the_content', 'flohmarkt_remove_duplicate_images', 20);
 
 /* ───────────────────── THEME SETUP ───────────────────── */
 function flohmarkt_setup() {
@@ -925,7 +1008,7 @@ function flohmarkt_update_legal_pages_once() {
         update_option('flohmarkt_legal_pages_updated_v1', true);
     }
 }
-add_action( 'init', 'flohmarkt_update_legal_pages_once' );
+// add_action( 'init', 'flohmarkt_update_legal_pages_once' );
 
 /* ───────────────────── AJAX LOAD MORE EVENTS ───────────────────── */
 function flohmarkt_load_more_events() {

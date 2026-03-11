@@ -1,0 +1,512 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://www.flohmarkt-troedelmarkt.de/wp-json/wp/v2/posts",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Basic RmxvaG1hcmt0OjBpZE4gSG9jZCBJOUhuIDlSOGEgb1VmdSBKVEQx"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json._postBody) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "46ae2af4-375f-41b1-9902-aa9f12b1bd10",
+      "name": "Publish Post",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2840, 160],
+      "continueOnFail": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const cfg = $('Gemini Prompt').first().json;\nconst rawResponse = $json;\n\nlet parsed = {};\nlet parseSuccess = false;\n\ntry {\n  let raw = '';\n  if (rawResponse.choices && rawResponse.choices[0]) {\n    raw = rawResponse.choices[0].message.content || '';\n  } else if (rawResponse.candidates && rawResponse.candidates[0]) {\n    raw = rawResponse.candidates[0].content.parts.map(p => p.text).join('');\n  } else {\n    console.log('UNKNOWN RESPONSE:', JSON.stringify(rawResponse).substring(0, 300));\n    raw = JSON.stringify(rawResponse);\n  }\n\n  console.log('AI raw length: ' + raw.length);\n  console.log('AI start: ' + raw.substring(0, 200));\n\n  let cleaned = raw.replace(/```json\\n?/gi, '').replace(/```\\n?/g, '').trim();\n\n  try { parsed = JSON.parse(cleaned); parseSuccess = true; } catch(e1) {\n    try {\n      const m = cleaned.match(/\\{[\\s\\S]*\\}/);\n      if (m) { parsed = JSON.parse(m[0]); parseSuccess = true; }\n    } catch(e2) {\n      try {\n        let fixed = cleaned.replace(/,\\s*}/g, '}').replace(/,\\s*]/g, ']');\n        const m2 = fixed.match(/\\{[\\s\\S]*\\}/);\n        if (m2) { parsed = JSON.parse(m2[0]); parseSuccess = true; }\n      } catch(e3) { console.log('JSON PARSE FAILED: ' + e3.message); }\n    }\n  }\n} catch(outerErr) { console.log('Error: ' + outerErr.message); }\n\nconsole.log('Parse OK: ' + parseSuccess + ', Title: ' + (parsed.title || 'N/A'));\n\nif (!parseSuccess || !parsed.articleHTML || parsed.articleHTML.length < 100) {\n  console.log('STOPPING: No valid article');\n  return [];\n}\n\nlet html = parsed.articleHTML;\nconst seenUrls = new Set();\nhtml = html.replace(/<img[^>]+src=[\"']([^\"']+)[\"'][^>]*>/gi, (match, src) => {\n  const key = src.split('?')[0].split('#')[0];\n  if (seenUrls.has(key)) return '';\n  seenUrls.add(key);\n  return match;\n});\nhtml = html.replace(/<img[^>]+wp-content\\/uploads[^>]+>/gi, '');\n\nconst inlineImages = cfg.inlineImages || (cfg.scrapedImages || []).slice(1);\nif (inlineImages.length > 0) {\n  let h2s = []; let ss = 0;\n  while (true) { const i = html.indexOf('<h2', ss); if (i === -1) break; const e = html.indexOf('</h2>', i); if (e === -1) break; h2s.push(e + 5); ss = e + 5; }\n  let offset = 0;\n  for (let i = 0; i < inlineImages.length && i < h2s.length; i++) {\n    if (!html.includes(inlineImages[i])) {\n      const tag = '<img src=\"' + inlineImages[i] + '\" alt=\"' + (cfg.topic || 'Bild').replace(/\"/g, '') + '\" class=\"wp-image size-large\" loading=\"lazy\" />';\n      const np = html.indexOf('</p>', h2s[i] + offset);\n      if (np > -1) { html = html.substring(0, np+4) + '\\n' + tag + html.substring(np+4); offset += tag.length + 1; }\n    }\n  }\n}\n\nconst postBody = {\n  title: parsed.title || cfg.topic,\n  content: html,\n  status: 'publish',\n  categories: [parsed.category_id || 1],\n  excerpt: parsed.metaDescription || ''\n};\nif (cfg.featured_media && cfg.featured_media > 0) postBody.featured_media = cfg.featured_media;\n\nconsole.log('PUBLISHING: ' + postBody.title);\nreturn [{json: {_postBody: postBody, _featuredMediaId: cfg.featured_media || 0}}];"
+      },
+      "id": "e58eab5c-63b9-4e46-afb8-e5e33897eb57",
+      "name": "Build Post",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2636, 160]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer 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"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json._aiBody) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "2cede45b-d8ad-474d-8380-12b099c82d3d",
+      "name": "Gemini Flash",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2428, 160],
+      "continueOnFail": false,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 10000
+    },
+    {
+      "parameters": {
+        "jsCode": "const scrape = $('Build Image List').first().json;\nconst uploadResponse = $('Upload to WP Media').first().json;\n\nlet featured_media = null;\nlet wpImageUrl = '';\n\nif (uploadResponse && uploadResponse.id && !isNaN(parseInt(uploadResponse.id))) {\n  featured_media = parseInt(uploadResponse.id);\n  wpImageUrl = uploadResponse.source_url || '';\n  console.log('✅ Featured image uploaded OK — WP Media ID:', featured_media, '| URL:', wpImageUrl);\n} else {\n  console.log('⚠️ Featured image upload failed. Response:', JSON.stringify(uploadResponse).substring(0, 200));\n}\n\nconst allImages = scrape.scrapedImages || [];\nconst finalImages = allImages.map((url, idx) => idx === 0 && wpImageUrl ? wpImageUrl : url);\nconst topicAlt = (scrape.topic || 'Flohmarkt').replace(/\"/g, '').substring(0, 60);\n\nconst imageSnippets = finalImages.map((url, idx) => {\n  const alt = topicAlt + (idx === 0 ? ' - Hauptbild' : ' - Bild ' + (idx + 1));\n  return '<img src=\"' + url + '\" alt=\"' + alt + '\" class=\"wp-image size-large\" loading=\"lazy\" />';\n});\n\nconsole.log('Total images for article: ' + imageSnippets.length);\n\nlet imgBlock = '';\nif (imageSnippets.length > 0) {\n  imgBlock = '\\n\\nBILDER (' + imageSnippets.length + ' Stueck):\\n';\n  imageSnippets.forEach((html, idx) => {\n    const pos = idx === 0 ? 'nach Einleitung' : 'nach H2 ' + idx;\n    imgBlock += 'BILD ' + (idx + 1) + ' (' + pos + '):\\n' + html + '\\n\\n';\n  });\n  imgBlock += 'Jedes Bild GENAU EINMAL! KEIN Bild doppelt!';\n}\n\nconst angles = ['Geheimtipps', 'Fehler vermeiden', 'Insider-Wissen', 'Praktischer Ratgeber', 'Schritt-fuer-Schritt', 'Pro und Contra', 'Mythen entlarven', 'Zukunftstrends', 'Anfaenger-Guide'];\nconst angle = angles[Math.floor(Math.random() * angles.length)];\n\nconst sys = 'Du bist ein professioneller deutscher SEO-Redakteur.\\n\\n' +\n  'SPRACHE: ZWINGEND AUF DEUTSCH, auch wenn die Quelle Englisch ist.\\n' +\n  'EINZIGARTIGKEIT: Schreibe VOLLSTAENDIG NEU!\\n' +\n  'Dein BLICKWINKEL: ' + angle + '\\n' +\n  'KEINE generischen Titel. Nutze kreative Formate.\\n\\n' +\n  'STRUKTUR (KEIN H1):\\n' +\n  '<article><p>[Einleitung]</p>[BILD 1]<h2>[H2]</h2><p>[Text]</p>[BILD 2]<h2>[H2]</h2><p>[Text]</p>[BILD 3]<h2>FAQ</h2><h3>[3 Fragen]</h3><h2>Fazit</h2><p>[CTA]</p></article>' + imgBlock + '\\n\\n' +\n  'Antworte NUR mit JSON:\\n{\"title\":\"Titel\",\"slug\":\"slug\",\"metaDescription\":\"Meta 150 Zeichen\",\"category_id\":1,\"articleHTML\":\"<article>...</article>\",\"keywords\":[\"k1\",\"k2\",\"k3\"]}';\n\nconst usr = 'Thema: ' + scrape.topic + '\\nBlickwinkel: ' + angle + '\\n' + (scrape.rssDescription || '') + '\\n' + (scrape.parsedText || '').substring(0, 3000);\n\nconst body = {\n  model: 'google/gemini-2.0-flash-001',\n  messages: [\n    { role: 'system', content: sys },\n    { role: 'user', content: usr }\n  ],\n  max_tokens: 8000,\n  temperature: 0.75,\n  response_format: { type: 'json_object' }\n};\n\nreturn [{json: {...scrape, featured_media, scrapedImages: finalImages, inlineImages: finalImages.slice(1), _aiBody: body}}];"
+      },
+      "id": "d1cb0ba0-676b-42d1-af8f-f9f5a61d634d",
+      "name": "Gemini Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2220, 160]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://www.flohmarkt-troedelmarkt.de/wp-json/wp/v2/media",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Basic RmxvaG1hcmt0OjBpZE4gSG9jZCBJOUhuIDlSOGEgb1VmdSBKVEQx"
+            },
+            {
+              "name": "Content-Disposition",
+              "value": "={{ 'attachment; filename=\"featured-' + Date.now() + '.jpg\"' }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "imageData",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "e5f6a7b8-upload-media-0001",
+      "name": "Upload to WP Media",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2020, 160],
+      "continueOnFail": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.scrapedImages && $json.scrapedImages[0] ? $json.scrapedImages[0] : '' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            },
+            {
+              "name": "Accept",
+              "value": "image/webp,image/jpeg,image/png,image/*,*/*"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "imageData"
+            }
+          },
+          "redirect": {
+            "redirect": {
+              "followRedirects": true,
+              "maxRedirects": 5
+            }
+          },
+          "timeout": 20000
+        }
+      },
+      "id": "a1b2c3d4-fetch-img-0001",
+      "name": "Fetch Featured Image",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1920, 160],
+      "continueOnFail": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const inputData = $json;\nconst html = inputData.data || inputData.body || '';\nif (!html || html.length < 100) {\n  console.log('Empty HTML');\n  return [{json: {...inputData, parsedText: '', scrapedImages: []}}];\n}\n\nconst images = [];\nconst seenBasenames = new Set();\n\nfunction addImage(url) {\n  if (!url || url.length < 20) return;\n  if (!url.startsWith('http')) {\n    if (url.startsWith('//')) url = 'https:' + url;\n    else if (url.startsWith('/')) {\n      try { url = new URL(inputData.redirectUrl).origin + url; } catch(e) { return; }\n    } else return;\n  }\n  const lower = url.toLowerCase();\n  if (lower.includes('logo') || lower.includes('icon') || lower.includes('avatar') ||\n      lower.includes('pixel') || lower.includes('1x1') || lower.includes('spacer') ||\n      lower.includes('tracking') || lower.includes('badge') || lower.includes('button') ||\n      lower.includes('transparent') || lower.includes('data:image') ||\n      lower.includes('google.com/') || lower.includes('gstatic.com') ||\n      lower.includes('facebook.com') || lower.includes('twitter.com') ||\n      lower.includes('.svg') || lower.includes('.gif') || lower.length < 30) return;\n  const basename = url.split('/').pop().split('?')[0].split('#')[0].toLowerCase();\n  if (basename.length < 4 || seenBasenames.has(basename)) return;\n  seenBasenames.add(basename);\n  images.push(url);\n}\n\nconst ogImage = html.match(/<meta[^>]+property=[\"']og:image[\"'][^>]+content=[\"']([^\"']+)[\"']/i) ||\n                html.match(/<meta[^>]+content=[\"']([^\"']+)[\"'][^>]+property=[\"']og:image[\"']/i);\nif (ogImage) addImage(ogImage[1]);\n\nconst twitImg = html.match(/<meta[^>]+name=[\"']twitter:image[\"'][^>]+content=[\"']([^\"']+)[\"']/i) ||\n               html.match(/<meta[^>]+content=[\"']([^\"']+)[\"'][^>]+name=[\"']twitter:image[\"']/i);\nif (twitImg) addImage(twitImg[1]);\n\nconst articleMatch = html.match(/<article[^>]*>([\\s\\S]*?)<\\/article>/i) ||\n                     html.match(/<div[^>]+class=[\"'][^\"']*(?:article|post|content|entry|story)[^\"']*[\"'][^>]*>([\\s\\S]*?)<\\/div>/i);\nconst articleHtml = articleMatch ? articleMatch[1] : html;\n\nconst imgTags = articleHtml.match(/<img[^>]+>/gi) || [];\nfor (const tag of imgTags) {\n  const srcMatch = tag.match(/(?:data-src|data-lazy-src|src)=[\"']([^\"']+)[\"']/i);\n  if (srcMatch) addImage(srcMatch[1]);\n}\n\nconst figures = articleHtml.match(/<figure[^>]*>[\\s\\S]*?<\\/figure>/gi) || [];\nfor (const fig of figures) {\n  const srcset = fig.match(/srcset=[\"']([^\"']+)[\"']/i);\n  if (srcset) {\n    const parts = srcset[1].split(',').map(s => s.trim());\n    const largest = parts[parts.length - 1].split(' ')[0];\n    addImage(largest);\n  }\n}\n\nconst finalImages = images.slice(0, 5);\nconsole.log('Scraped ' + finalImages.length + ' unique images');\nfinalImages.forEach((img, i) => console.log('  Img ' + (i+1) + ': ' + img.substring(0, 80)));\n\nlet text = '';\nconst textBlocks = articleHtml.match(/<p[^>]*>([\\s\\S]*?)<\\/p>/gi) || [];\nfor (const block of textBlocks) {\n  text += block.replace(/<[^>]+>/g, '').trim() + ' ';\n}\nif (text.length < 200) text = html.replace(/<[^>]+>/g, ' ').replace(/\\s+/g, ' ').trim();\n\nreturn [{json: {...inputData, parsedText: text.substring(0, 5000), scrapedImages: finalImages}}];"
+      },
+      "id": "0e8e5ad0-7949-434b-9c5c-8f4f49ffd35e",
+      "name": "Scrape Content",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1520, 160]
+    },
+    {
+      "parameters": {
+        "jsCode": "const html = ($json.data || $json.body || '').toLowerCase();\nconst blocked = html.includes('consent') || html.includes('einwilligung') || html.includes('pur-abo') || html.includes('block') || html.length < 1000;\nreturn [{json:{...$input.first().json, isBlocked: blocked, rawHtml: $json.data || $json.body || '' }}];"
+      },
+      "id": "e1c1d9b7-f642-4c3d-953e-e9ada9af69bd",
+      "name": "Check Block",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 160]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.redirectUrl }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            }
+          ]
+        },
+        "options": {
+          "redirect": {
+            "redirect": {
+              "followRedirects": true,
+              "maxRedirects": 5
+            }
+          },
+          "timeout": 15000
+        }
+      },
+      "id": "8b052dc5-0026-451c-a308-8b311a9221eb",
+      "name": "Fetch Article",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [928, 160],
+      "continueOnFail": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const USED_KEY = 'usedLinks';\nconst USED_TITLES_KEY = 'usedTitles';\nconst all = $input.all();\nconst kw = ['flohmarkt','troedelmarkt','antik','vintage','sammler','secondhand','upcycling','retro','markt','nachhaltigkeit','recycling','diy','einrichten','wohnen','deko','garten','design','interior','handwerk','kreativ','basteln','lifestyle','trend','ideen','tipps','ratgeber','sparen','gebraucht','nachhaltig','moebel','renovieren','restaurieren'];\nlet items = [];\nfor (const it of all) {\n  const raw = it.json.data || it.json.body || '';\n  if (!raw || raw.length < 50) continue;\n  const xs = raw.match(/<item>[\\s\\S]*?<\\/item>/g) || [];\n  for (const x of xs) {\n    const t1 = x.match(/<title><!\\[CDATA\\[([^\\]]+)\\]\\]><\\/title>/);\n    const t2 = x.match(/<title>([^<]+)<\\/title>/);\n    const title = (t1?.[1] || t2?.[1] || '').trim();\n    const l1 = x.match(/<link>([^<]+)<\\/link>/);\n    let link = l1?.[1] || '';\n    if (link.includes('url=')) try { link = decodeURIComponent(link.split('url=')[1].split('&')[0]); } catch(e) {}\n    const d1 = x.match(/<description><!\\[CDATA\\[([\\s\\S]*?)\\]\\]><\\/description>/);\n    const d2 = x.match(/<description>([^<]+)<\\/description>/);\n    const desc = (d1?.[1] || d2?.[1] || '').trim();\n    if (title && link) {\n      const combined = (title + ' ' + desc).toLowerCase();\n      const hasKw = kw.some(k => combined.includes(k));\n      items.push({title, link, desc: desc.replace(/<[^>]+>/g, '').trim(), priority: hasKw ? 1 : 2});\n    }\n  }\n}\nitems.sort((a, b) => a.priority - b.priority);\nconsole.log('Total articles found: ' + items.length);\nif (items.length === 0) { console.log('NO ARTICLES FOUND'); return []; }\n\nconst today = new Date().toISOString().slice(0, 10);\nconst gd = $getWorkflowStaticData('global');\nlet used = {}; try { used = JSON.parse(gd[USED_KEY] || '{}'); } catch(e) {}\nlet usedT = []; try { usedT = JSON.parse(gd[USED_TITLES_KEY] || '[]'); } catch(e) {}\nconst cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 30);\nObject.keys(used).forEach(d => { if (d < cutoff.toISOString().slice(0, 10)) delete used[d]; });\nif (usedT.length > 100) usedT = usedT.slice(-50);\nconst allUsed = Object.values(used).flat();\n\nfunction wordOverlap(a, b) {\n  const wa = a.split(/\\s+/).filter(w => w.length > 3);\n  const wb = new Set(b.split(/\\s+/).filter(w => w.length > 3));\n  if (wa.length === 0) return 0;\n  return wa.filter(w => wb.has(w)).length / wa.length;\n}\nlet fresh = items.filter(i => !allUsed.includes(i.link) && !usedT.some(t => t === i.title.toLowerCase() || wordOverlap(i.title.toLowerCase(), t) > 0.6));\nconsole.log('Fresh articles: ' + fresh.length);\nif (fresh.length === 0) fresh = items.filter(i => !allUsed.includes(i.link));\nif (fresh.length === 0) fresh = items;\n\nconst sel = fresh[Math.floor(Math.random() * Math.min(fresh.length, 5))];\nif (!used[today]) used[today] = [];\nused[today].push(sel.link);\nusedT.push(sel.title.toLowerCase());\ngd[USED_KEY] = JSON.stringify(used);\ngd[USED_TITLES_KEY] = JSON.stringify(usedT);\nconsole.log('Selected: ' + sel.title);\nreturn [{json: {topic: sel.title, redirectUrl: sel.link, rssDescription: sel.desc}}];"
+      },
+      "id": "841f3185-95bb-4389-b362-6f95e9f10555",
+      "name": "Pick Article",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [720, 160]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.feedUrl }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "cff8a162-b0b6-4f1f-a875-c5cf91924b81",
+      "name": "Fetch RSS",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [528, 160],
+      "continueOnFail": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const feeds = [\n  'https://www.vintaliciously.de/feed',\n  'https://www.vintage-kontor.com/blogs/vintage-blog.atom',\n  'https://blog-dortmund.de/feed',\n  'https://www.kurz-mal-weg.de/feed',\n  'https://www.kulturfalter.de/feed',\n  'https://www.feelslikehessen.de/feed',\n  'https://upcyclingbylulu.wordpress.com/feed',\n  'https://recyclingkunst.wordpress.com/feed',\n  'https://greenmoxie.com/feed',\n  'https://recreateddesigns.com/feed',\n  'https://upcycledesignlab.com/feed',\n  'https://victorias-vintage.co.uk/feed',\n  'https://glamourdaze.com/feed',\n  'https://whaelse.com/en/feed',\n  'https://atomicredhead.com/feed',\n  'https://calivintage.com/feed',\n  'https://sustainabledeeds.com/feed',\n  'https://thejunkmap.com.au/feed',\n  'https://birdzofafeather.ca/web-stories/feed',\n  'https://diyinspired.com/category/trash-to-treasure/feed'\n];\n\nconst shuffled = feeds.sort(() => Math.random() - 0.5);\nconst selected = shuffled.slice(0, 5);\nconsole.log('Selected ' + selected.length + ' feeds: ' + selected.join(', '));\nreturn selected.map(url => ({ json: { feedUrl: url } }));"
+      },
+      "id": "db33b9e5-176d-4b45-832a-8361c924f6f6",
+      "name": "RSS Feeds",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [320, 160]
+    },
+    {
+      "parameters": {
+        "jsCode": "const inputData = $json;\nconst scraped = inputData.scrapedImages || [];\nconst validImages = [];\nconst seenBasenames = new Set();\n\nfor (const img of scraped) {\n  if (img.startsWith('http') && img.length > 20 && !img.includes('placeholder') && !img.includes('data:image') && !img.includes('icon') && !img.includes('logo') && !img.includes('1x1') && !img.includes('pixel') && !img.includes('spacer') && !img.includes('tracking') && !img.includes('google.com/') && !img.includes('gstatic.com') && !img.includes('badge') && !img.includes('button') && !img.includes('avatar')) {\n    const basename = img.split('/').pop().split('?')[0].split('#')[0].toLowerCase();\n    if (!seenBasenames.has(basename) && basename.length > 3) {\n      seenBasenames.add(basename);\n      validImages.push(img);\n    }\n  }\n}\n\nconst finalImages = validImages.slice(0, 5);\nconsole.log('Unique valid images: ' + finalImages.length + ' from ' + scraped.length + ' scraped');\nfinalImages.forEach((img, i) => console.log('Img ' + (i+1) + ': ' + img.substring(0, 80)));\n\nif (finalImages.length === 0) {\n  console.log('NO VALID IMAGES - STOPPING. No blog will be published.');\n  return [];\n}\n\nreturn [{json: { ...inputData, scrapedImages: finalImages, hasRealImages: true }}];"
+      },
+      "id": "c3d4e5f6-aaaa-bbbb-cccc-ddddeeee0001",
+      "name": "Build Image List",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1820, 160]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { go: true } }];"
+      },
+      "id": "d9cfd240-c6e4-483b-a850-aa2cd4b83a62",
+      "name": "Go4",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [96, 384]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { go: true } }];"
+      },
+      "id": "e686f92d-b502-4ecb-baf0-a788a95ca644",
+      "name": "Go3",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [48, 256]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { go: true } }];"
+      },
+      "id": "ee9e7379-ab7f-4dbb-8889-3f91baba48c2",
+      "name": "Go2",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [48, 128]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { go: true } }];"
+      },
+      "id": "973ca298-416e-490d-b597-f47d7e3e6e4f",
+      "name": "Go1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [48, 0]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 20 * * *"
+            }
+          ]
+        }
+      },
+      "id": "ab896796-5b17-42e2-a8a0-0282df532553",
+      "name": "Night 8PM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-192, 384]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 16 * * *"
+            }
+          ]
+        }
+      },
+      "id": "8d5eefcb-6dda-4975-b8e3-2aae77e1d6b5",
+      "name": "Evening 4PM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-192, 256]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 13 * * *"
+            }
+          ]
+        }
+      },
+      "id": "9c7e1039-ddb1-4885-8bb8-2432ab8804f8",
+      "name": "Afternoon 1PM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-192, 128]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * *"
+            }
+          ]
+        }
+      },
+      "id": "19fd2562-7fc6-4acc-b9d0-b556e5d145fc",
+      "name": "Morning 9AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-192, 0]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://www.flohmarkt-troedelmarkt.de/wp-json/wp/v2/posts/{{ $json.id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Basic RmxvaG1hcmt0OjBpZE4gSG9jZCBJOUhuIDlSOGEgb1VmdSBKVEQx"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ (() => { const mid = $('Build Post').first().json._featuredMediaId; return mid && mid > 0 ? JSON.stringify({ featured_media: mid }) : JSON.stringify({}); })() }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "f1a2b3c4-set-feat-img-0001",
+      "name": "Set Featured Image",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [3040, 160],
+      "continueOnFail": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "_wpBase",
+              "value": "https://www.flohmarkt-troedelmarkt.de",
+              "description": "Reference only — URLs are hardcoded in all HTTP nodes"
+            },
+            {
+              "name": "_auth",
+              "value": "Basic RmxvaG1hcmt0OjBpZE4gSG9jZCBJOUhuIDlSOGEgb1VmdSBKVEQx",
+              "description": "WordPress Application Password (Base64)"
+            }
+          ]
+        }
+      },
+      "id": "global-config-node-0001",
+      "name": "GLOBAL CONFIG",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.2,
+      "position": [100, 160]
+    },
+    {
+      "parameters": {},
+      "id": "manual-trigger-node-0001",
+      "name": "When clicking 'Test workflow'",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [-192, 512]
+    }
+  ],
+  "connections": {
+    "When clicking 'Test workflow'": {
+      "main": [[{ "node": "GLOBAL CONFIG", "type": "main", "index": 0 }]]
+    },
+    "Build Post": {
+      "main": [[{ "node": "Publish Post", "type": "main", "index": 0 }]]
+    },
+    "Publish Post": {
+      "main": [[{ "node": "Set Featured Image", "type": "main", "index": 0 }]]
+    },
+    "Upload to WP Media": {
+      "main": [[{ "node": "Gemini Prompt", "type": "main", "index": 0 }]]
+    },
+    "Fetch Featured Image": {
+      "main": [[{ "node": "Upload to WP Media", "type": "main", "index": 0 }]]
+    },
+    "Build Image List": {
+      "main": [[{ "node": "Fetch Featured Image", "type": "main", "index": 0 }]]
+    },
+    "Scrape Content": {
+      "main": [[{ "node": "Build Image List", "type": "main", "index": 0 }]]
+    },
+    "Check Block": {
+      "main": [[{ "node": "Scrape Content", "type": "main", "index": 0 }]]
+    },
+    "Fetch Article": {
+      "main": [[{ "node": "Check Block", "type": "main", "index": 0 }]]
+    },
+    "Pick Article": {
+      "main": [[{ "node": "Fetch Article", "type": "main", "index": 0 }]]
+    },
+    "Fetch RSS": {
+      "main": [[{ "node": "Pick Article", "type": "main", "index": 0 }]]
+    },
+    "RSS Feeds": {
+      "main": [[{ "node": "Fetch RSS", "type": "main", "index": 0 }]]
+    },
+    "Go4": {
+      "main": [[{ "node": "GLOBAL CONFIG", "type": "main", "index": 0 }]]
+    },
+    "Go3": {
+      "main": [[{ "node": "GLOBAL CONFIG", "type": "main", "index": 0 }]]
+    },
+    "Go2": {
+      "main": [[{ "node": "GLOBAL CONFIG", "type": "main", "index": 0 }]]
+    },
+    "Go1": {
+      "main": [[{ "node": "GLOBAL CONFIG", "type": "main", "index": 0 }]]
+    },
+    "Night 8PM": {
+      "main": [[{ "node": "Go4", "type": "main", "index": 0 }]]
+    },
+    "Evening 4PM": {
+      "main": [[{ "node": "Go3", "type": "main", "index": 0 }]]
+    },
+    "Afternoon 1PM": {
+      "main": [[{ "node": "Go2", "type": "main", "index": 0 }]]
+    },
+    "Morning 9AM": {
+      "main": [[{ "node": "Go1", "type": "main", "index": 0 }]]
+    },
+    "Gemini Flash": {
+      "main": [[{ "node": "Build Post", "type": "main", "index": 0 }]]
+    },
+    "Gemini Prompt": {
+      "main": [[{ "node": "Gemini Flash", "type": "main", "index": 0 }]]
+    },
+    "GLOBAL CONFIG": {
+      "main": [[{ "node": "RSS Feeds", "type": "main", "index": 0 }]]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "instanceId": "6c044ddc9665f3e2e221220e66bf5ab0154c9e5191f2ad65430c8c2fcd6b4180"
+  }
+}

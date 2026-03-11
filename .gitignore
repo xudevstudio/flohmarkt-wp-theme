@@ -1,3 +1,4 @@
 *.json
+!n8n-workflow-flohmarkt-blog.json
 import-data/
 *.db
