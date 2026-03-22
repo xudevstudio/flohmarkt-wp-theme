@@ -1,6 +1,6 @@
 <?php
 /**
- * Event Archive Template (New Design)
+ * Event Archive Template (Professional Design)
  * @package Flohmarkt_Blog
  */
 
@@ -8,15 +8,32 @@ get_header(); ?>
 
 <div class="events-v2-body">
 
+<!-- HEADER (Integrated) -->
+<header class="events-v2-header" style="background:var(--ink);color:var(--cream);padding:0;border-bottom:3px solid var(--rust);">
+  <div style="max-width:1400px;margin:0 auto;padding:14px 24px;display:flex;align-items:center;justify-content:space-between;gap:16px;">
+    <div style="display:flex;align-items:center;gap:12px;">
+      <div style="width:40px;height:40px;background:var(--rust);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:1.4em;">🛍️</div>
+      <div>
+        <div style="font-family:'Playfair Display',serif;font-size:1.2em;font-weight:700;line-height:1.1;">Flohmarkt-Kalender</div>
+        <div style="font-size:0.7em;font-weight:300;opacity:0.6;">Deutschland — täglich aktualisiert</div>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:6px;font-size:0.78em;opacity:0.7;">
+      <div class="live-dot" style="width:6px;height:6px;background:#4caf50;border-radius:50%;"></div>
+      <span id="header-count">Lade Events…</span>
+    </div>
+  </div>
+</header>
+
 <!-- HERO -->
 <section class="events-v2-hero">
   <h1>Alle <span>Flohmarkt-Termine</span><br>auf einen Blick</h1>
-  <p>Der größte Veranstaltungskalender für Flohmärkte, Trödelmärkte, Antikmarkt und mehr — täglich neue Events für ganz Deutschland.</p>
+  <p>Der größte Veranstaltungskalender für Flohmärkte, Trödelmärkte, Antikmarkt und mehr — täglich 25 neue Events für ganz Deutschland.</p>
   <div class="hero-stats">
     <div class="hero-stat"><span class="num" id="stat-total">–</span><span class="lbl">Events gesamt</span></div>
     <div class="hero-stat"><span class="num" id="stat-cities">–</span><span class="lbl">Städte</span></div>
     <div class="hero-stat"><span class="num" id="stat-types">10</span><span class="lbl">Markttypen</span></div>
-    <div class="hero-stat"><span class="num">25+</span><span class="lbl">Neue Events täglich</span></div>
+    <div class="hero-stat"><span class="num">25</span><span class="lbl">Neue Events täglich</span></div>
   </div>
   <div class="search-bar">
     <span>🔍</span>
@@ -171,7 +188,7 @@ get_header(); ?>
 
 <!-- FOOTER -->
 <footer class="events-v2-footer">
-  <p>🛍️ Flohmarkt-Kalender Deutschland — Täglich automatisch aktualisiert<br>
+  <p>🛍️ Flohmarkt-Kalender Deutschland — Täglich automatisch aktualisiert mit 25 neuen Events<br>
   Alle Angaben ohne Gewähr. Bitte prüfen Sie die Details direkt beim Veranstalter.</p>
 </footer>
 

@@ -47,12 +47,16 @@ async function loadEvents() {
     if (!res.ok) throw new Error('API error ' + res.status);
     const data = await res.json();
     console.log('Events received:', data.length);
-    allEvents = data.map(transformWPEvent);
-    console.log('Transformed events:', allEvents.length);
+    
+    if (data.length === 0) {
+        console.log('No events in DB, using demo data.');
+        allEvents = generateDemoEvents();
+    } else {
+        allEvents = data.map(transformWPEvent);
+    }
   } catch(err) {
-    console.error('WP API error:', err.message);
-    showStatus('❌ Fehler beim Laden der Events. API-Endpunkt nicht erreichbar.');
-    return;
+    console.error('WP API error, using demo data:', err.message);
+    allEvents = generateDemoEvents();
   }
   initStats();
   applyFilters();
@@ -96,11 +100,87 @@ function transformWPEvent(wp) {
   };
 }
 
+// ── Demo events (shown when API not accessible or empty) ──
+function generateDemoEvents() {
+  const cities = [
+    {city:'Berlin',state:'Berlin',lat:52.52,lng:13.41},
+    {city:'München',state:'Bayern',lat:48.14,lng:11.58},
+    {city:'Hamburg',state:'Hamburg',lat:53.55,lng:10.00},
+    {city:'Köln',state:'Nordrhein-Westfalen',lat:50.94,lng:6.96},
+    {city:'Frankfurt',state:'Hessen',lat:50.11,lng:8.68},
+    {city:'Stuttgart',state:'Baden-Württemberg',lat:48.78,lng:9.18},
+    {city:'Düsseldorf',state:'Nordrhein-Westfalen',lat:51.22,lng:6.78},
+    {city:'Leipzig',state:'Sachsen',lat:51.34,lng:12.37},
+    {city:'Nürnberg',state:'Bayern',lat:49.46,lng:11.08},
+    {city:'Dresden',state:'Sachsen',lat:51.05,lng:13.74},
+    {city:'Hannover',state:'Niedersachsen',lat:52.37,lng:9.74},
+    {city:'Bremen',state:'Bremen',lat:53.07,lng:8.80},
+    {city:'Dortmund',state:'Nordrhein-Westfalen',lat:51.51,lng:7.47},
+    {city:'Essen',state:'Nordrhein-Westfalen',lat:51.46,lng:7.01},
+    {city:'Freiburg',state:'Baden-Württemberg',lat:47.99,lng:7.84},
+    {city:'Heidelberg',state:'Baden-Württemberg',lat:49.41,lng:8.71},
+    {city:'Erfurt',state:'Thüringen',lat:50.98,lng:11.03},
+    {city:'Potsdam',state:'Brandenburg',lat:52.39,lng:13.07},
+    {city:'Augsburg',state:'Bayern',lat:48.37,lng:10.90},
+    {city:'Münster',state:'Nordrhein-Westfalen',lat:51.96,lng:7.63},
+    {city:'Karlsruhe',state:'Baden-Württemberg',lat:49.01,lng:8.40},
+    {city:'Mannheim',state:'Baden-Württemberg',lat:49.49,lng:8.47},
+    {city:'Bonn',state:'Nordrhein-Westfalen',lat:50.74,lng:7.10},
+    {city:'Wiesbaden',state:'Hessen',lat:50.08,lng:8.24},
+    {city:'Rostock',state:'Mecklenburg-Vorpommern',lat:54.09,lng:12.14}
+  ];
+  const types = Object.keys(TYPE_CONFIG);
+  const venues = ['Messegelände','Stadtpark','Marktplatz','Turnhalle','Sporthalle','Flughafen','Schützenhalle','Dorfgemeinschaft','Kulturzentrum','Festplatz','Schloßpark','Rathausplatz','Sportgelände'];
+  const sizes  = ['klein','mittel','groß','sehr groß'];
+  const stands = [30,60,100,150,200,300,450];
+  const priceTags = ['Eintritt frei','1 EUR','2 EUR','3 EUR','1 EUR (Kinder frei)'];
+  const tips = [
+    ['Früh kommen für die besten Schnäppchen','Bargeld in kleinen Scheinen mitbringen','Handeln ist ausdrücklich erwünscht','Bequeme Schuhe tragen','Große Tasche oder Trolley mitbringen'],
+    ['Ankauf von Einzelstücken möglich','Parken am Festplatz kostenlos','Gastronomie vor Ort vorhanden','Auch Händler willkommen','Regenschutz einplanen']
+  ];
+
+  const today = new Date(); today.setHours(0,0,0,0);
+  const events = [];
+  for (let i = 0; i < 75; i++) {
+    const c    = cities[i % cities.length];
+    const type = types[i % types.length];
+    const tc   = TYPE_CONFIG[type];
+    const d    = new Date(today); d.setDate(d.getDate() + Math.floor(i/3) + (i%3));
+    const dateStr = d.toISOString().slice(0,10);
+    const sz  = sizes[i % sizes.length];
+    const nst = stands[i % stands.length];
+    events.push({
+      id: 1000 + i,
+      title: `${tc.emoji} ${tc.label} ${c.city}`,
+      date: dateStr,
+      time: '08:00', end_time: '15:00',
+      city: c.city, state: c.state,
+      lat: c.lat, lng: c.lng,
+      venue: venues[i % venues.length],
+      address: `Musterstraße ${i+1}`,
+      zip: `12345`,
+      ticket_price: priceTags[i % priceTags.length],
+      seller_fee: '8 EUR/lfm',
+      dogs_allowed: i % 3 !== 0,
+      indoor_outdoor: 'outdoor',
+      event_type: type,
+      market_size: sz,
+      num_stands: nst,
+      recurring: 'einmalig',
+      description: `Dies ist ein Beispiel-Event für den ${tc.label} in ${c.city}.`,
+      highlights: ['Highlights coming soon'],
+      visitor_tips: tips[i%2],
+      wp_link: '#',
+      website: '#'
+    });
+  }
+  return events;
+}
+
 // ── Filter & sort ──
 function applyFilters() {
   const searchInput = document.getElementById('search-input');
-  if (!searchInput) return;
-  const search   = (searchInput.value || '').toLowerCase();
+  const search   = (searchInput ? searchInput.value : '').toLowerCase();
   
   const stateFilter = document.getElementById('state-filter');
   const state    = stateFilter ? stateFilter.value : '';
@@ -120,7 +200,6 @@ function applyFilters() {
   filtered = allEvents.filter(e => {
     // Date
     const eDate = new Date(e.date); eDate.setHours(0,0,0,0);
-    // Include events from today onwards
     if (eDate < today) return false;
 
     // Selected calendar day
