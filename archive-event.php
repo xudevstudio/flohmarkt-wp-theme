@@ -8,6 +8,23 @@ get_header(); ?>
 
 <div class="events-v2-body">
 
+<!-- HEADER (Integrated) -->
+<header class="events-v2-header" style="background:var(--ink);color:var(--cream);padding:0;border-bottom:3px solid var(--rust);">
+  <div style="max-width:1400px;margin:0 auto;padding:14px 24px;display:flex;align-items:center;justify-content:space-between;gap:16px;">
+    <div style="display:flex;align-items:center;gap:12px;">
+      <div style="width:40px;height:40px;background:var(--rust);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:1.4em;">🛍️</div>
+      <div>
+        <div style="font-family:'Playfair Display',serif;font-size:1.2em;font-weight:700;line-height:1.1;">Flohmarkt-Kalender</div>
+        <div style="font-size:0.7em;font-weight:300;opacity:0.6;">Deutschland — täglich aktualisiert</div>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:6px;font-size:0.78em;opacity:0.7;">
+      <div class="live-dot" style="width:6px;height:6px;background:#4caf50;border-radius:50%;"></div>
+      <span id="header-count">Lade Events…</span>
+    </div>
+  </div>
+</header>
+
 <!-- HERO -->
 <section class="events-v2-hero">
   <h1>Alle <span>Flohmarkt-Termine</span><br>auf einen Blick</h1>
