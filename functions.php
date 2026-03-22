@@ -199,6 +199,13 @@ function flohmarkt_scripts() {
         'nonce'   => wp_create_nonce( 'flohmarkt_nonce' ),
         'siteurl' => get_site_url(),
     ));
+
+    // New Events V2 Assets
+    if ( is_page_template( 'page-events-v2.php' ) || is_post_type_archive( 'event' ) ) {
+        wp_enqueue_style( 'flohmarkt-playfair', 'https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Sans:wght@300;400;500;600&display=swap', array(), null );
+        wp_enqueue_style( 'flohmarkt-events-v2', get_template_directory_uri() . '/assets/css/events-v2.css', array(), '1.0.0' );
+        wp_enqueue_script( 'flohmarkt-events-v2', get_template_directory_uri() . '/assets/js/events-v2.js', array( 'flohmarkt-main' ), '1.0.0', true );
+    }
 }
 add_action( 'wp_enqueue_scripts', 'flohmarkt_scripts' );
 
@@ -300,14 +307,65 @@ function flohmarkt_event_meta_callback( $post ) {
     $organizer = get_post_meta( $post->ID, '_event_organizer', true );
     $website = get_post_meta( $post->ID, '_event_website', true );
 
+    $zip   = get_post_meta( $post->ID, '_event_zip', true );
+    $state = get_post_meta( $post->ID, '_event_state', true );
+    $venue = get_post_meta( $post->ID, '_event_venue', true );
+    $lat   = get_post_meta( $post->ID, '_event_lat', true );
+    $lng   = get_post_meta( $post->ID, '_event_lng', true );
+    $contact = get_post_meta( $post->ID, '_event_contact', true );
+    $ticket_price = get_post_meta( $post->ID, '_event_ticket_price', true );
+    $seller_fee  = get_post_meta( $post->ID, '_event_seller_fee', true );
+    $parking     = get_post_meta( $post->ID, '_event_parking', true );
+    $transport   = get_post_meta( $post->ID, '_event_transport', true );
+    $dogs_allowed = get_post_meta( $post->ID, '_event_dogs_allowed', true );
+    $indoor_outdoor = get_post_meta( $post->ID, '_event_indoor_outdoor', true );
+    $accessibility = get_post_meta( $post->ID, '_event_accessibility', true );
+    $event_type    = get_post_meta( $post->ID, '_event_type', true );
+    $market_size   = get_post_meta( $post->ID, '_event_market_size', true );
+    $num_stands    = get_post_meta( $post->ID, '_event_num_stands', true );
+    $recurring     = get_post_meta( $post->ID, '_event_recurring', true );
+
     echo '<table class="form-table">';
+    echo '<tr><th><label>Markttyp</label></th><td><select name="_event_type" class="regular-text">
+        <option value="flohmarkt" '.selected($event_type, 'flohmarkt', false).'>Flohmarkt</option>
+        <option value="troedelmarkt" '.selected($event_type, 'troedelmarkt', false).'>Trödelmarkt</option>
+        <option value="antikmarkt" '.selected($event_type, 'antikmarkt', false).'>Antikmarkt</option>
+        <option value="kinderflohmarkt" '.selected($event_type, 'kinderflohmarkt', false).'>Kinderflohmarkt</option>
+        <option value="nachtflohmarkt" '.selected($event_type, 'nachtflohmarkt', false).'>Nachtflohmarkt</option>
+        <option value="hofflohmarkt" '.selected($event_type, 'hofflohmarkt', false).'>Hofflohmarkt</option>
+        <option value="vintage_markt" '.selected($event_type, 'vintage_markt', false).'>Vintage-Markt</option>
+        <option value="secondhand" '.selected($event_type, 'secondhand', false).'>Secondhand</option>
+        <option value="buecher_markt" '.selected($event_type, 'buecher_markt', false).'>Büchermarkt</option>
+        <option value="schallplatten_markt" '.selected($event_type, 'schallplatten_markt', false).'>Schallplattenmarkt</option>
+    </select></td></tr>';
     echo '<tr><th><label>Datum</label></th><td><input type="date" name="_event_date" value="' . esc_attr($date) . '" class="regular-text"></td></tr>';
     echo '<tr><th><label>Startzeit</label></th><td><input type="time" name="_event_time" value="' . esc_attr($time) . '" class="regular-text"></td></tr>';
     echo '<tr><th><label>Endzeit</label></th><td><input type="time" name="_event_end_time" value="' . esc_attr($end_time) . '" class="regular-text"></td></tr>';
     echo '<tr><th><label>Stadt</label></th><td><input type="text" name="_event_city" value="' . esc_attr($city) . '" class="regular-text" placeholder="z.B. Berlin, München"></td></tr>';
+    echo '<tr><th><label>PLZ</label></th><td><input type="text" name="_event_zip" value="' . esc_attr($zip) . '" class="regular-text"></td></tr>';
+    echo '<tr><th><label>Bundesland</label></th><td><input type="text" name="_event_state" value="' . esc_attr($state) . '" class="regular-text"></td></tr>';
+    echo '<tr><th><label>Veranstaltungsort (Name)</label></th><td><input type="text" name="_event_venue" value="' . esc_attr($venue) . '" class="regular-text" placeholder="z.B. Messegelände"></td></tr>';
     echo '<tr><th><label>Adresse</label></th><td><input type="text" name="_event_address" value="' . esc_attr($address) . '" class="regular-text" placeholder="Straße und Hausnummer"></td></tr>';
+    echo '<tr><th><label>Koordinaten (Lat/Lng)</label></th><td>Lat: <input type="text" name="_event_lat" value="' . esc_attr($lat) . '" style="width:100px;"> Lng: <input type="text" name="_event_lng" value="' . esc_attr($lng) . '" style="width:100px;"></td></tr>';
     echo '<tr><th><label>Veranstalter</label></th><td><input type="text" name="_event_organizer" value="' . esc_attr($organizer) . '" class="regular-text"></td></tr>';
+    echo '<tr><th><label>Kontakt / E-Mail</label></th><td><input type="text" name="_event_contact" value="' . esc_attr($contact) . '" class="regular-text"></td></tr>';
     echo '<tr><th><label>Website</label></th><td><input type="url" name="_event_website" value="' . esc_attr($website) . '" class="regular-text" placeholder="https://"></td></tr>';
+    echo '<tr><th><label>Eintrittspreis</label></th><td><input type="text" name="_event_ticket_price" value="' . esc_attr($ticket_price) . '" class="regular-text" placeholder="z.B. Eintritt frei"></td></tr>';
+    echo '<tr><th><label>Standgebühr</label></th><td><input type="text" name="_event_seller_fee" value="' . esc_attr($seller_fee) . '" class="regular-text" placeholder="z.B. 10 EUR / lfm"></td></tr>';
+    echo '<tr><th><label>Anzahl Stände</label></th><td><input type="number" name="_event_num_stands" value="' . esc_attr($num_stands) . '" class="regular-text"></td></tr>';
+    echo '<tr><th><label>Größe</label></th><td><input type="text" name="_event_market_size" value="' . esc_attr($market_size) . '" class="regular-text" placeholder="z.B. mittel"></td></tr>';
+    echo '<tr><th><label>Turnus</label></th><td><input type="text" name="_event_recurring" value="' . esc_attr($recurring) . '" class="regular-text" placeholder="z.B. monatlich"></td></tr>';
+    echo '<tr><th><label>Parken</label></th><td><input type="text" name="_event_parking" value="' . esc_attr($parking) . '" class="regular-text"></td></tr>';
+    echo '<tr><th><label>ÖPNV</label></th><td><input type="text" name="_event_transport" value="' . esc_attr($transport) . '" class="regular-text"></td></tr>';
+    echo '<tr><th><label>Barrierefreiheit</label></th><td><input type="text" name="_event_accessibility" value="' . esc_attr($accessibility) . '" class="regular-text"></td></tr>';
+    echo '<tr><th><label>Optionen</label></th><td>
+        <label><input type="checkbox" name="_event_dogs_allowed" value="1" '.checked($dogs_allowed, '1', false).'> Hunde erlaubt</label> | 
+        Lage: <select name="_event_indoor_outdoor">
+            <option value="outdoor" '.selected($indoor_outdoor, 'outdoor', false).'>Freiluftmarkt</option>
+            <option value="indoor" '.selected($indoor_outdoor, 'indoor', false).'>Hallenmarkt</option>
+            <option value="both" '.selected($indoor_outdoor, 'both', false).'>Beides</option>
+        </select>
+    </td></tr>';
     echo '</table>';
 }
 
@@ -316,10 +374,21 @@ function flohmarkt_save_event_meta( $post_id ) {
     if ( defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE ) return;
     if ( ! current_user_can( 'edit_post', $post_id ) ) return;
 
-    $fields = array( '_event_date', '_event_time', '_event_end_time', '_event_city', '_event_address', '_event_organizer', '_event_website' );
+    $fields = array( 
+        '_event_date', '_event_time', '_event_end_time', '_event_city', '_event_address', 
+        '_event_organizer', '_event_website', '_event_zip', '_event_state', '_event_venue', 
+        '_event_lat', '_event_lng', '_event_contact', '_event_ticket_price', '_event_seller_fee', 
+        '_event_parking', '_event_transport', '_event_dogs_allowed', '_event_indoor_outdoor', 
+        '_event_accessibility', '_event_type', '_event_market_size', '_event_num_stands', '_event_recurring' 
+    );
     foreach ( $fields as $field ) {
         if ( isset( $_POST[$field] ) ) {
             update_post_meta( $post_id, $field, sanitize_text_field( $_POST[$field] ) );
+        } else {
+            // Handle checkboxes (e.g. dogs_allowed)
+            if ($field === '_event_dogs_allowed') {
+                delete_post_meta( $post_id, $field );
+            }
         }
     }
 }
@@ -327,7 +396,13 @@ add_action( 'save_post_event', 'flohmarkt_save_event_meta' );
 
 /* ── Register event meta for REST API (N8N access) ── */
 function flohmarkt_register_event_meta_rest() {
-    $meta_fields = array( '_event_date', '_event_time', '_event_end_time', '_event_city', '_event_address', '_event_organizer', '_event_website' );
+    $meta_fields = array( 
+        '_event_date', '_event_time', '_event_end_time', '_event_city', '_event_address', 
+        '_event_organizer', '_event_website', '_event_zip', '_event_state', '_event_venue', 
+        '_event_lat', '_event_lng', '_event_contact', '_event_ticket_price', '_event_seller_fee', 
+        '_event_parking', '_event_transport', '_event_dogs_allowed', '_event_indoor_outdoor', 
+        '_event_accessibility', '_event_type', '_event_market_size', '_event_num_stands', '_event_recurring' 
+    );
     foreach ( $meta_fields as $field ) {
         register_post_meta( 'event', $field, array(
             'show_in_rest'  => true,

@@ -1,6 +1,6 @@
 <?php
 /**
- * Event Archive Template (New Design)
+ * Template Name: Events V2
  * @package Flohmarkt_Blog
  */
 
